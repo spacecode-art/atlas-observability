@@ -1,0 +1,13 @@
+route:
+  receiver: "default"
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: "default"
+    # No real notification channel wired yet — this is intentionally
+    # a no-op receiver until Phase 3's alerting rules are built and
+    # tested against synthetic/replayed data, per the plan. Tracked
+    # in Current Status, not silently absent.

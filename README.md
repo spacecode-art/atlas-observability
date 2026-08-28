@@ -167,3 +167,56 @@ see Current Status below.
 **Built:**
 - `docker-compose.yml` — full LGTM stack (Prometheus, Loki, Tempo,
   Grafana, Alertmanager) plus an OTel Collector with an
+  attribute-scrubbing processor as a second anonymization layer
+- Grafana provisioned with all three datasources (Prometheus, Loki,
+  Tempo) pre-wired, including trace-to-logs and trace-to-metrics
+  correlation
+- Full stack verified running end-to-end: all six services confirmed
+  healthy via readiness-endpoint checks, not just `docker compose ps`
+  (see [`docs/evidence/stack-health-check.md`](docs/evidence/stack-health-check.md)).
+  A startup readiness race in Loki/Tempo was investigated and found
+  to be expected behavior, not a bug (ADR-0002)
+
+**Not yet built, tracked honestly:**
+- Tawira is not yet instrumented with the OTel SDK
+- Local Supabase instance (via `supabase start`) not yet stood up
+- Golden Signals dashboard JSON — deliberately not built yet, since
+  building dashboard queries against zero real data means guessing;
+  this comes after real telemetry is flowing
+- Alertmanager rules — currently a no-op receiver with no rules or
+  notification channel configured
+- Threat model, incident runbook — not yet written
+- Demo video
+
+---
+
+## Cost Model
+
+**$0 spent.** The entire stack runs via Docker Compose on a local
+machine — Prometheus, Loki, Tempo, Grafana, Alertmanager, and the OTel
+Collector are all free/open-source, self-hosted. Tawira runs locally
+against a local Supabase instance, not a hosted/paid Supabase project.
+
+---
+
+## Design Decisions (ADRs)
+
+| ADR | Decision |
+|---|---|
+| 0001 | Use Tawira (private production SaaS) instead of a throwaway sample app |
+| 0002 | Loki/Tempo ring-readiness startup race — accepted, not a bug |
+
+---
+
+## Documentation
+
+Additional documentation is available under the `docs/` directory.
+Architecture decisions are recorded using ADRs in `docs/adr/`.
+
+## Contributing
+
+Please read `CONTRIBUTING.md` before submitting changes.
+
+## License
+
+This project is licensed under the MIT License.

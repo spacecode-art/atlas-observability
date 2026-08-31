@@ -3,6 +3,7 @@
 # -----------------------------
 .env
 .env.*
+!.env.example
 
 # -----------------------------
 # Docker / stack local data

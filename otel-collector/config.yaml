@@ -9,6 +9,7 @@ receivers:
 processors:
   batch:
     timeout: 5s
+
   # Belt-and-suspenders: even though the OTel SDK config in Tawira is
   # responsible for using anonymized service/span names at the source,
   # this attributes processor strips any attribute that shouldn't be
@@ -24,24 +25,33 @@ processors:
 exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
+
   loki:
     endpoint: http://loki:3100/loki/api/v1/push
+
   otlp/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
 
 service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+
   pipelines:
     metrics:
       receivers: [otlp]
       processors: [batch, attributes/scrub]
       exporters: [prometheus]
+
     logs:
       receivers: [otlp]
       processors: [batch, attributes/scrub]
       exporters: [loki]
+
     traces:
       receivers: [otlp]
       processors: [batch, attributes/scrub]
       exporters: [otlp/tempo]
+

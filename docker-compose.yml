@@ -8,6 +8,7 @@ services:
     ports:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Collector self-telemetry (verify receiver_accepted counters)
     depends_on:
       - prometheus
       - loki
@@ -20,6 +21,7 @@ services:
     container_name: atlas-prometheus
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
       - prometheus-data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

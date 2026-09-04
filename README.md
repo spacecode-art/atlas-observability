@@ -195,7 +195,7 @@ Status below.
 
 **Not yet built, tracked honestly:**
 - Local Supabase instance (via `supabase start`) not yet stood up
-- Threat model, incident runbook — not yet written
+- Incident runbook — not yet written
 - Demo video
 
 ---
@@ -283,6 +283,35 @@ Logged, not yet fixed; next step is `grep -rn OTEL_SERVICE_NAME
 node_modules/env-runner/dist/runners/vercel/worker.mjs`.
 
 ---
+
+## Threat Model
+
+Full STRIDE analysis: [`docs/threat-model.md`](docs/threat-model.md).
+Grounded in this repo's actual config and session evidence, not
+generic boilerplate — two findings were verified against upstream
+source rather than assumed, and one (the unauthenticated Alertmanager
+write API) was demonstrated directly via the synthetic-alert curls
+used for the Slack routing proof.
+
+**Every service in this stack is unauthenticated at the network
+layer** — a deliberate, stated tradeoff for local-only deployment,
+not an oversight.
+
+| Finding | Category | Status |
+|---|---|---|
+| OTLP receivers accept unauthenticated ingest from any reachable client | Spoofing | Accepted risk, local-only |
+| Alertmanager's write API has no auth — demonstrated this session via curl | Tampering | Accepted risk, local-only |
+| Slack webhook URL pasted in plaintext during setup (real incident) | Information Disclosure | Fixed — routed through `api_url_file`, webhook rotated |
+| `--web.enable-lifecycle` exposes unauthenticated `POST /-/quit`, verified against Prometheus v2.55.1 source | Denial of Service | Accepted risk, local-only |
+| Grafana anonymous Viewer can run arbitrary PromQL/LogQL via Explore | Information Disclosure | Partially mitigated — Collector's `attributes/scrub` processor means no identifying data reaches Prometheus/Loki to query in the first place |
+
+**What would actually need to change before any public exposure**:
+auth extension on the OTLP receiver, a reverse proxy in front of
+every service (Alertmanager, Prometheus, Loki, Tempo, Collector
+self-telemetry), dropping `--web.enable-lifecycle`, and disabling
+Grafana anonymous access. None of this is built — correctly, per this
+repo's zero-cost/local-only scope — but it's named explicitly rather
+than left implicit.
 
 ## Documentation
 

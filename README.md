@@ -117,7 +117,7 @@ atlas-observability/
 │       ├── provisioning/
 │       │   ├── datasources/datasources.yml
 │       │   └── dashboards/dashboard.yml
-│       └── dashboards/         # Golden Signals dashboard JSON (pending real data)
+│       └── dashboards/         # golden-signals.json — live, verified against real Tawira traffic
 ├── .editorconfig
 ├── .gitignore
 ├── CHANGELOG.md
@@ -157,8 +157,9 @@ docker compose ps
 # 5. Alertmanager: http://localhost:9093
 ```
 
-Tawira instrumentation and local Supabase setup: not yet wired in —
-see Current Status below.
+Tawira instrumentation: wired in and verified end-to-end, both in
+`vite dev` and the built Docker/production Nitro path — see Current
+Status below.
 
 ---
 
@@ -170,21 +171,30 @@ see Current Status below.
   attribute-scrubbing processor as a second anonymization layer
 - Grafana provisioned with all three datasources (Prometheus, Loki,
   Tempo) pre-wired, including trace-to-logs and trace-to-metrics
-  correlation
+  correlation, with explicit `uid`s pinned so that correlation
+  can't silently break across Grafana versions
 - Full stack verified running end-to-end: all six services confirmed
   healthy via readiness-endpoint checks, not just `docker compose ps`
   (see [`docs/evidence/stack-health-check.md`](docs/evidence/stack-health-check.md)).
   A startup readiness race in Loki/Tempo was investigated and found
   to be expected behavior, not a bug (ADR-0002)
+- Tawira instrumented with the OTel SDK (traces, logs, metrics),
+  including a real breaking-change bug found, fixed, and verified
+  against a live Tempo trace (ADR-0003)
+- Golden Signals dashboard, built against real (anonymized) Tawira
+  traffic — request rate, error rate, p50/p95/p99 latency, status
+  code breakdown, event-loop/heap saturation, and Collector pipeline
+  health. Every metric name verified against live Prometheus data,
+  not just published `.d.ts` source (see
+  [`docs/evidence/golden-signals-verification.md`](docs/evidence/golden-signals-verification.md))
+- Alertmanager: severity-routed to Slack (critical/warning), rules
+  covering error rate, latency, event-loop saturation, and target
+  liveness. Proven end-to-end with synthetic alerts confirmed
+  delivered in Slack, not just config-valid (see
+  [`docs/evidence/alertmanager-slack-verification.md`](docs/evidence/alertmanager-slack-verification.md))
 
 **Not yet built, tracked honestly:**
-- Tawira is not yet instrumented with the OTel SDK
 - Local Supabase instance (via `supabase start`) not yet stood up
-- Golden Signals dashboard JSON — deliberately not built yet, since
-  building dashboard queries against zero real data means guessing;
-  this comes after real telemetry is flowing
-- Alertmanager rules — currently a no-op receiver with no rules or
-  notification channel configured
 - Threat model, incident runbook — not yet written
 - Demo video
 
@@ -205,6 +215,72 @@ against a local Supabase instance, not a hosted/paid Supabase project.
 |---|---|
 | 0001 | Use Tawira (private production SaaS) instead of a throwaway sample app |
 | 0002 | Loki/Tempo ring-readiness startup race — accepted, not a bug |
+| 0003 | Pass exporters via options object to `Batch*Processor` constructors — OTel v2.x breaking change from the older positional-argument API |
+
+---
+
+## Testing Strategy
+
+Nothing in this repo is marked "done" on the strength of a config
+file parsing cleanly. Every component was proven at the next level up:
+
+- **Config validity**: `promtool check rules` / `amtool check-config`
+  run against the exact pinned image versions (both require
+  `--entrypoint` overrides — the images set the binary itself as
+  `ENTRYPOINT`, so the check subcommand as a bare arg just errors).
+- **Metric-shape verification**: every metric name used in the
+  dashboard and alert rules was checked against the actual published
+  npm tarball source for the pinned OTel package versions, then
+  confirmed a second time against live Prometheus query output —
+  matching this repo's founding lesson (ADR-0003) that library API
+  shape should be verified, not assumed from memory or older docs.
+- **End-to-end delivery, not just "config accepted"**: Alertmanager
+  routing was proven by firing synthetic alerts through its real API
+  and confirming both the correct receiver match *and* actual message
+  delivery in Slack — a receiver name in an API response doesn't
+  prove a webhook POST succeeded.
+- **Both runtime paths**: Tawira's OTel instrumentation was verified
+  in `vite dev` and in the built Docker/`node-server` Nitro path
+  separately, since a dev-mode success doesn't predict the built
+  bundle (this was an explicit risk called out before either was
+  tested, and it caught nothing here — but the check itself is the
+  point).
+
+---
+
+## Monitoring
+
+Golden Signals dashboard (Grafana, auto-provisioned) covers:
+
+- **Rate** — request rate by HTTP method
+- **Errors** — 5xx ratio over a 5m window
+- **Duration** — p50/p95/p99 latency via `histogram_quantile`
+- **Saturation** — Node.js event-loop utilization and delay p99,
+  V8 heap used (via `@opentelemetry/instrumentation-runtime-node`,
+  bundled automatically by `auto-instrumentations-node`, no explicit
+  wiring required)
+
+Alerting (Alertmanager, routed to Slack by severity):
+
+| Alert | Condition | Severity |
+|---|---|---|
+| `HighErrorRate` | 5xx ratio > 5% for 5m | critical |
+| `HighLatencyP99` | p99 latency > 2s for 5m | warning |
+| `EventLoopSaturation` | event-loop utilization > 0.9 for 5m | warning |
+| `TargetDown` | any scrape target unreachable for 2m | critical |
+
+Distributed tracing (Tempo, via Grafana Explore): confirmed rendering
+a full nested trace across the Vite dev process and the spawned
+`env-runner` worker process, with correct W3C trace-context
+propagation across the process boundary — see ADR-0003 for the
+investigation this came out of.
+
+**Known gap**: the worker process's `service.name` resource attribute
+reads `atlas-demo-apib` — a stray trailing `b` — instead of
+`atlas-demo-api`. Confirmed present in both raw trace data and the
+`exported_job` label on metrics (wider than originally scoped).
+Logged, not yet fixed; next step is `grep -rn OTEL_SERVICE_NAME
+node_modules/env-runner/dist/runners/vercel/worker.mjs`.
 
 ---
 

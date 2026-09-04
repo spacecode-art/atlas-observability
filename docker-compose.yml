@@ -61,6 +61,7 @@ services:
     container_name: atlas-alertmanager
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/secrets/slack_webhook_url:/etc/alertmanager/secrets/slack_webhook_url:ro
     ports:
       - "9093:9093"
     networks:

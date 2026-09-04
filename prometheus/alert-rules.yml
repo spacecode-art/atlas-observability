@@ -1,3 +1,43 @@
 groups:
-  - name: placeholder
-    rules: []
+  - name: atlas-golden-signals
+    rules:
+      - alert: HighErrorRate
+        expr: >-
+          100 * sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
+          / sum(rate(http_server_request_duration_seconds_count[5m])) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tawira 5xx error rate above 5%"
+          description: "{{ $value | printf \"%.2f\" }}% of requests are returning 5xx over the last 5m window."
+
+      - alert: HighLatencyP99
+        expr: >-
+          histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tawira p99 latency above 2s"
+          description: "p99 request duration is {{ $value | printf \"%.2f\" }}s over the last 5m window."
+
+      - alert: EventLoopSaturation
+        expr: nodejs_eventloop_utilization_ratio > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tawira Node.js event loop saturated"
+          description: "Event loop utilization is {{ $value | printf \"%.2f\" }} (>0.9) on {{ $labels.exported_job }} — requests may start queueing."
+
+  - name: atlas-pipeline-health
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus scrape target down: {{ $labels.job }}"
+          description: "{{ $labels.instance }} (job {{ $labels.job }}) has been unreachable for over 2m."

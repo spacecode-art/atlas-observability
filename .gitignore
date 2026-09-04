@@ -6,6 +6,12 @@
 !.env.example
 
 # -----------------------------
+# Alertmanager secrets
+# -----------------------------
+alertmanager/secrets/slack_webhook_url
+!alertmanager/secrets/slack_webhook_url.example
+
+# -----------------------------
 # Docker / stack local data
 # -----------------------------
 prometheus/data/

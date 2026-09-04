@@ -195,7 +195,6 @@ Status below.
 
 **Not yet built, tracked honestly:**
 - Local Supabase instance (via `supabase start`) not yet stood up
-- Incident runbook — not yet written
 - Demo video
 
 ---
@@ -312,6 +311,25 @@ self-telemetry), dropping `--web.enable-lifecycle`, and disabling
 Grafana anonymous access. None of this is built — correctly, per this
 repo's zero-cost/local-only scope — but it's named explicitly rather
 than left implicit.
+
+## Incident Runbook
+
+Full runbook: [`docs/incident-runbook.md`](docs/incident-runbook.md).
+Five scenarios, each mapped to a real alert rule in
+`prometheus/alert-rules.yml` or a finding directly demonstrated in
+`docs/threat-model.md` — not generic filler.
+
+| Scenario | Trigger | Coverage |
+|---|---|---|
+| Prometheus killed via unauthenticated `/-/quit` | Threat model finding | ⚠️ Detection gap: indistinguishable in logs from a normal restart |
+| Fake alert injected via Alertmanager's unauthenticated API | Threat model finding | Detectable — compare Prometheus's own rule state against Alertmanager's active alerts |
+| Collector pipeline stalled | Golden Signals dashboard goes flat | `TargetDown`, Pipeline Health panels |
+| High error rate / latency | Dashboard + trace correlation | `HighErrorRate`, `HighLatencyP99` |
+| Event loop saturation | Dashboard | `EventLoopSaturation` |
+
+The two security-driven scenarios have **no alert coverage today** —
+stated plainly in the runbook itself, matching the threat model's
+own accepted-risk framing rather than implying it's handled.
 
 ## Documentation
 

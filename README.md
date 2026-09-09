@@ -98,7 +98,7 @@ atlas-observability/
 │   └── workflows/            # CI (repository validation)
 ├── docs/
 │   ├── adr/                  # Architecture Decision Records
-│   ├── diagrams/              # Architecture diagrams
+│   ├── diagrams/              # (currently empty — architecture diagram is inline in README, above)
 │   ├── evidence/               # Committed proof-of-work
 │   ├── threat-model.md         # STRIDE threat model
 │   └── incident-runbook.md     # Operational runbook
@@ -157,9 +157,12 @@ docker compose ps
 # 5. Alertmanager: http://localhost:9093
 ```
 
-Tawira instrumentation: wired in and verified end-to-end, both in
-`vite dev` and the built Docker/production Nitro path — see Current
-Status below.
+Tawira instrumentation: wired in and verified end-to-end against
+`vite dev` (`npm run dev:otel`, `NITRO_PRESET=node-server`) — see
+Current Status below. The built Docker/production Nitro path has
+been confirmed to build, pass its security scan, and get signed
+(CI), but OTel telemetry has **not** been separately verified from
+the running built container — a real gap, tracked in Future Roadmap.
 
 ---
 
@@ -193,8 +196,12 @@ Status below.
   delivered in Slack, not just config-valid (see
   [`docs/evidence/alertmanager-slack-verification.md`](docs/evidence/alertmanager-slack-verification.md))
 
+- Local Supabase (via `supabase start`) instrumented end-to-end with
+  Tawira, including a real multi-bug postmortem (env-runner's Vercel
+  dev-preset sandbox, a corrupted Vite cache, and a Prometheus
+  HELP-string collision) — see Postmortem Example below
+
 **Not yet built, tracked honestly:**
-- Local Supabase instance (via `supabase start`) not yet stood up
 - Demo video
 
 ---
@@ -215,6 +222,7 @@ against a local Supabase instance, not a hosted/paid Supabase project.
 | 0001 | Use Tawira (private production SaaS) instead of a throwaway sample app |
 | 0002 | Loki/Tempo ring-readiness startup race — accepted, not a bug |
 | 0003 | Pass exporters via options object to `Batch*Processor` constructors — OTel v2.x breaking change from the older positional-argument API |
+| 0004 | Drop `instrumentation-http`'s `http.client.request.duration` at the collector level to resolve a Prometheus HELP-string collision with `instrumentation-undici` |
 
 ---
 
@@ -238,12 +246,13 @@ file parsing cleanly. Every component was proven at the next level up:
   and confirming both the correct receiver match *and* actual message
   delivery in Slack — a receiver name in an API response doesn't
   prove a webhook POST succeeded.
-- **Both runtime paths**: Tawira's OTel instrumentation was verified
-  in `vite dev` and in the built Docker/`node-server` Nitro path
-  separately, since a dev-mode success doesn't predict the built
-  bundle (this was an explicit risk called out before either was
-  tested, and it caught nothing here — but the check itself is the
-  point).
+- **Only one runtime path checked so far**: Tawira's OTel
+  instrumentation has been verified in `vite dev`
+  (`NITRO_PRESET=node-server`), not yet in the built Docker/production
+  container. Dev-mode success doesn't predict the built bundle —
+  this is named as an open gap rather than assumed to be covered,
+  since the earlier draft of this README claimed it was checked
+  when it wasn't.
 
 ---
 
@@ -279,7 +288,7 @@ reads `atlas-demo-apib` — a stray trailing `b` — instead of
 `atlas-demo-api`. Confirmed present in both raw trace data and the
 `exported_job` label on metrics (wider than originally scoped).
 Logged, not yet fixed; next step is `grep -rn OTEL_SERVICE_NAME
-node_modules/env-runner/dist/runners/vercel/worker.mjs`.
+node_modules/env-runner/dist/runners/node-worker/worker.mjs`.
 
 ---
 
@@ -330,6 +339,61 @@ Five scenarios, each mapped to a real alert rule in
 The two security-driven scenarios have **no alert coverage today** —
 stated plainly in the runbook itself, matching the threat model's
 own accepted-risk framing rather than implying it's handled.
+
+## CI/CD
+
+[`​.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every PR and push to `main`. Currently a single job: secrets scanning via `atlas-security`'s reusable `reusable-secrets-scan.yml` workflow (pinned to `v1.0.4`) — this repo consumes the cross-repo security tooling built in Phase 2 rather than duplicating it.
+
+**Deliberately not yet in CI**: linting, dashboard JSON schema validation, `docker compose config` validation. This is an observability stack, not an application with a build step — most of what would normally run in CI (does the stack start, do the dashboards render) currently only gets exercised by the manual verification workflow documented in `docs/evidence/`. Worth automating before treating this repo as "done," not before.
+
+## Security Review
+
+Full threat model: [`docs/threat-model.md`](docs/threat-model.md) (STRIDE). This section is the narrower, CI/tooling-facing complement to that document.
+
+- **Secrets scanning**: enforced in CI on every PR (see CI/CD above). Caught nothing in this repo's history, but the discipline exists — and this repo has a real incident to point to as evidence it's not theoretical: a live Slack webhook URL was pasted in plaintext in chat during Phase 3 setup, caught and rotated, documented in the threat model rather than quietly fixed.
+- **No SAST/dependency scanning configured for this repo specifically** — it's a Docker Compose config repo with no application code of its own to scan; the real attack surface (unauthenticated OTLP/Alertmanager/Grafana endpoints) is covered by the threat model's STRIDE analysis instead, since static analysis tools don't catch "this service has no auth" in a compose file.
+- **Known unauthenticated surfaces**, accepted for local-only scope, enumerated in full in the threat model: OTLP receiver, Alertmanager's write API, Prometheus's `/-/quit` lifecycle endpoint, Grafana anonymous Viewer access.
+
+## Cost Analysis
+
+**Actual spend: $0.** For comparison, running the equivalent managed stack:
+
+| Component | This repo (self-hosted) | Managed equivalent | Approx. managed cost |
+|---|---|---|---|
+| Metrics + dashboards | Prometheus + Grafana, Docker Compose | Grafana Cloud (Pro tier) | ~$49–299/mo depending on active series |
+| Log aggregation | Loki, Docker Compose | Grafana Cloud Logs / Datadog Logs | ~$0.10–2.50/GB ingested |
+| Distributed tracing | Tempo, Docker Compose | Grafana Cloud Traces / Honeycomb | ~$0.50–5/GB ingested |
+| Alerting | Alertmanager, Docker Compose | PagerDuty / Opsgenie (routing only, Grafana Cloud alerting) | ~$21+/user/mo |
+
+At this repo's actual traffic volume (a handful of requests/minute from a single demo app), any of the above would likely sit on a free/trial tier — the comparison matters at production scale, not at this repo's current volume. The point being demonstrated isn't "this saves money right now," it's that the same LGTM architecture managed services are built on is fully reproducible at zero cost for evaluation, development, and portfolio purposes — see the roadmap's zero-cost philosophy (`atlas-foundation`) for the full reasoning.
+
+## Postmortem Example
+
+**Incident: Golden Signals dashboard showing zero data despite a correctly-wired OTel pipeline**
+
+*Date: 2026-09-04–07. Severity: blocking (Phase 3 could not close). Duration: ~1 session, multiple false starts.*
+
+**Impact**: local Supabase → Tawira → OTel Collector → Prometheus pipeline appeared completely non-functional. `http_server_request_duration_seconds` returned empty on every query, blocking verification that Phase 3's observability stack actually worked end-to-end against real (if local) traffic.
+
+**Timeline** (condensed — full raw evidence in `docs/evidence/`):
+1. Diagnosed `dev:otel` defaulting to Nitro's `vercel` preset, routing SSR through `env-runner`'s workerd sandbox — a separate JS runtime `instrumentation-http`'s `--import` hook can't reach. Fixed with `NITRO_PRESET=node-server`.
+2. That surfaced a second, unrelated fault: a corrupted Vite dependency-optimizer cache from multiple concurrent `dev:otel` processes stacking up during earlier debugging. Fixed with `rm -rf node_modules/.vite`.
+3. With the app now instrumented correctly and traffic flowing, `OTEL_DEBUG=1` confirmed real `http.server` spans being generated and queued for export — but Prometheus still showed nothing.
+4. Root cause found in the collector's own logs: `instrumentation-http@0.222.0` and `instrumentation-undici@0.32.0` both register a metric named `http.client.request.duration` with different HELP text, which fails Prometheus's `client_golang` registry check on every scrape. Fixed at the collector level with a `filter` processor (ADR-0004) rather than disabling either instrumentation, preserving both server-metric and real outbound-call visibility.
+5. Verified live: spans, server metrics, and client metrics all confirmed flowing with zero export errors.
+
+**What went wrong in the process, not just the code**: multiple early conclusions were drawn from partial evidence — a `git status`-dirty working copy was mistaken for the committed state during a separate lockfile investigation, and an initial hypothesis blamed the vercel-preset architecture for a crash that was more likely caused by cache corruption, a claim never actually isolated and tested. Both were caught and corrected before being written down as fact, but only because verification against raw evidence (`git show HEAD:...`, live Prometheus queries, collector logs) was treated as non-negotiable throughout — exactly the discipline this repo's threat model and prior ADRs already establish.
+
+**Follow-ups**: the `atlas-demo-apib` trailing-`b` service-name bug (pre-existing, independently reconfirmed during this incident) is still open — tracked in the Monitoring section above.
+
+## Future Roadmap
+
+- Fix the `atlas-demo-apib` trailing-`b` service name bug in `env-runner`'s worker process (tracked in Monitoring)
+- Verify OTel telemetry actually flows from the **built** Docker/production Nitro container, not just `vite dev` — currently unverified (see Testing Strategy)
+- Add browser-side OTel instrumentation for Tawira's client-fetch-heavy data layer (currently only server-side/`createServerFn` calls are traced — see the postmortem above for why)
+- CI: dashboard JSON schema validation, `docker compose config` validation on PR
+- Auth in front of every service before any deployment beyond local-only (OTLP receiver, Alertmanager, Grafana anonymous access, Prometheus `--web.enable-lifecycle`) — full list in the threat model
+- Migrate this stack onto Oracle Cloud's Always Free tier for a permanently-reachable public demo, per the roadmap's zero-cost toolkit
 
 ## Documentation
 

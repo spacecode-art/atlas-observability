@@ -40,7 +40,7 @@
       "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] },
       "targets": [
         {
-          "expr": "100 * sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count[5m]))",
+          "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[5m])) or vector(0)) / clamp_min((sum(rate(http_server_request_duration_seconds_count[5m])) or vector(0)), 1e-9)",
           "legendFormat": "5xx %",
           "refId": "A"
         }

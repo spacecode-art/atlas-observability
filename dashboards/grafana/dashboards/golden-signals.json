@@ -90,13 +90,25 @@
     },
     {
       "id": 5,
-      "type": "text",
-      "title": "Saturation — not yet instrumented",
+      "type": "timeseries",
+      "title": "Saturation — Event Loop Utilization",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
-      "options": {
-        "mode": "markdown",
-        "content": "**No saturation signal exists yet.**\n\n`instrumentation.mjs` only wires HTTP request/trace/log telemetry — no `@opentelemetry/host-metrics` (or equivalent) for CPU, memory, or event-loop lag. Rather than fake this panel with a proxy metric, it's tracked honestly as a gap.\n\n**Next step:** add `@opentelemetry/host-metrics`, wire it into the existing `metricReaders` array in `instrumentation.mjs`, confirm `process_cpu_seconds_total` / `nodejs_eventloop_lag_seconds` land in Prometheus, then replace this panel."
-      }
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        { "expr": "nodejs_eventloop_utilization_ratio", "legendFormat": "{{exported_job}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "timeseries",
+      "title": "Saturation — V8 Heap Used (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (exported_job) (v8js_memory_heap_used_bytes)", "legendFormat": "{{exported_job}}", "refId": "A" }
+      ]
     },
     {
       "id": 101,

@@ -100,6 +100,7 @@ atlas-observability/
 │   ├── adr/                  # Architecture Decision Records
 │   ├── diagrams/              # (currently empty — architecture diagram is inline in README, above)
 │   ├── evidence/               # Committed proof-of-work
+│   ├── demo/                   # Demo video preview GIF + asciinema verification cast
 │   ├── threat-model.md         # STRIDE threat model
 │   └── incident-runbook.md     # Operational runbook
 ├── otel-collector/
@@ -200,9 +201,13 @@ the running built container — a real gap, tracked in Future Roadmap.
   Tawira, including a real multi-bug postmortem (env-runner's Vercel
   dev-preset sandbox, a corrupted Vite cache, and a Prometheus
   HELP-string collision) — see Postmortem Example below
+- Demo video: 2:56 walkthrough (stack up, live dashboard, synthetic
+  alert to Slack, cross-process trace) plus an asciinema recording of
+  the ADR-0004 verification — see Demo Video below
 
 **Not yet built, tracked honestly:**
-- Demo video
+- Nothing — Phase 3's build checklist and this README's own required
+  structure are both complete as of this commit
 
 ---
 
@@ -394,6 +399,35 @@ At this repo's actual traffic volume (a handful of requests/minute from a single
 - CI: dashboard JSON schema validation, `docker compose config` validation on PR
 - Auth in front of every service before any deployment beyond local-only (OTLP receiver, Alertmanager, Grafana anonymous access, Prometheus `--web.enable-lifecycle`) — full list in the threat model
 - Migrate this stack onto Oracle Cloud's Always Free tier for a permanently-reachable public demo, per the roadmap's zero-cost toolkit
+
+## Benchmarks
+
+No formal load-testing benchmarks — this repo's traffic is real
+(anonymized) Tawira usage, not synthetic load generation, so
+throughput/latency-under-load numbers wouldn't be meaningful or
+reproducible by a reader.
+
+What *is* measurable and worth tracking: the Collector's own resource
+footprint, since "does observability tooling itself become the
+overhead problem" is a real, common criticism of self-hosted
+telemetry stacks. Collector self-telemetry (`:8888/metrics`) exposes
+this directly:
+
+    otelcol_process_cpu_seconds     0.75
+    otelcol_process_memory_rss      ~170 MiB
+    otelcol_process_uptime          ~28s (fresh restart)
+
+Reproduce with:
+```bash
+curl -s http://localhost:8888/metrics | grep -E "otelcol_process_(cpu|memory|uptime)" | grep -v "^#"
+```
+
+At this repo's traffic volume (single demo app, a handful of
+requests/minute), the Collector's footprint is small and not
+concerning. Worth revisiting under real sustained load before
+trusting this number at any larger scale — a fresh-restart snapshot
+isn't a load test, and is named as such rather than presented as more
+rigorous than it is.
 
 ## Demo Video
 

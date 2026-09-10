@@ -395,6 +395,16 @@ At this repo's actual traffic volume (a handful of requests/minute from a single
 - Auth in front of every service before any deployment beyond local-only (OTLP receiver, Alertmanager, Grafana anonymous access, Prometheus `--web.enable-lifecycle`) — full list in the threat model
 - Migrate this stack onto Oracle Cloud's Always Free tier for a permanently-reachable public demo, per the roadmap's zero-cost toolkit
 
+## Demo Video
+
+![Demo preview](docs/demo/demo-preview.gif)
+
+[▶ Watch the full walkthrough on YouTube](https://youtu.be/RTcdDzRZSoA) — stack coming up, live Golden Signals dashboard with real traffic, a synthetic alert firing through to Slack, and the cross-process distributed trace behind ADR-0003.
+
+CLI-only verification of the ADR-0004 fix (config wiring, zero errors, real metric data — no editing, nothing hidden):
+
+![verification](docs/demo/verification.gif)
+
 ## Documentation
 
 Additional documentation is available under the `docs/` directory.
